@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::rc::Weak;
 
 #[derive(Debug)]
 pub struct File {
@@ -15,17 +16,17 @@ impl File {
 }
 
 // BUG : Introduced reference cycle here..
-// Fix this by using the weak pointers to parent
+// Fix this by using the weak pointers to parent .. (Done !!)
 #[derive(Debug)]
 pub struct Directory {
     name: String,
-    parent: Option<Rc<RefCell<Directory>>>,
+    parent: Option<Weak<RefCell<Directory>>>,
     folders: HashMap<String, Rc<RefCell<Directory>>>,
     files: HashMap<String, File>,
 }
 
 impl Directory {
-    fn new(name: String, parent: Option<Rc<RefCell<Directory>>>) -> Self {
+    fn new(name: String, parent: Option<Weak<RefCell<Directory>>>) -> Self {
         Directory {
             name,
             parent,
@@ -79,7 +80,9 @@ fn main() {
                     let _cwd = current_directory.borrow();
                     match _cwd.parent.as_ref() {
                         Some(dir) => {
-                            changed_dir = Rc::clone(dir);
+                            // SAFETY : we require trust that parent directory is never deleted
+                            // And we have. Since this question does not have any rm operations
+                            changed_dir = dir.upgrade().unwrap();
                         }
                         None => {
                             panic!("Invalid_move");
@@ -106,7 +109,7 @@ fn main() {
         } else {
             if parts[0] == "dir" {
                 let new_dir =
-                    Directory::new(String::from(parts[1]), Some(Rc::clone(&current_directory)));
+                    Directory::new(String::from(parts[1]), Some(Rc::downgrade(&current_directory)));
                 let new_dir_rc = Rc::new(RefCell::new(new_dir));
                 current_directory
                     .borrow_mut()
@@ -121,6 +124,8 @@ fn main() {
             }
         }
     }
+
+    println!("{:#?}", all_dirs);
 
     // part1
     let max_size = 100000;
